@@ -11,7 +11,7 @@ globalThis.moveCount = 0;
 globalThis.gameStartedAt = Date.now();
 globalThis.board = [];
 globalThis.selectedPiece = null;
-globalThis.selectedPieceCoords = null;
+globalThis.selectedPieceCoords = {row : null, col: null};
 
 // ========== INICIALIZAR ==========
 document.addEventListener('DOMContentLoaded', () => {
@@ -25,18 +25,31 @@ function setupEventListeners() {
 }
 
 // ========== INICIALIZA EL TABLERO ==========
+// FIXME: Agregar que se debe utilizar la función getInitialPiece() en este método para inicializar el tablero.
 function initializeBoard() {
     // PASO 1: Vacía el array global del tablero para no acumular más filas si ya existía uno previo.
     // PASO 2: Crea 8 filas (usa BOARD_SIZE).
     // PASO 3: Para cada fila, crea un array de 8 columnas.
     // PASO 4: Para cada casilla determina si debe estar vacía, ser una ficha blanca o una ficha negra,
     // según la posición y usando la función getInitialPiece, y colócala en el tablero global.
+
+    globalThis.board = Array(BOARD_SIZE).fill().map(()=>Array(BOARD_SIZE).fill())
+
+    for (let row = 0; row < board.length; row++) {
+        for (let column = 0; column < board.length; column++) {
+            globalThis.board[row][column] = getInitialPiece(row, column);
+        }
+    }
 }
 
 function getInitialPiece(row, col) {
     // PASO 1: Si la fila es de 0 a 2 y (row+col) es impar, retorna la ficha NEGRA (usa PIECE_BLACK).
     // PASO 2: Si la fila es de 5 a 7 y (row+col) es impar, retorna la ficha BLANCA (usa PIECE_WHITE).
     // PASO 3: En cualquier otro caso, retorna null (casilla vacía).
+
+    if (row < 3 && (row + col) % 2 !== 0) return PIECE_BLACK;
+    if (row > 4 && (row + col) % 2 !== 0) return PIECE_WHITE;
+    return null;
 }
 
 // ========== DIBUJA EL TABLERO ==========
@@ -95,33 +108,74 @@ function handleCellClick(row, col) {
 function selectPiece(piece, row, col) {
     // PASO 1: Guarda la pieza seleccionada y sus coordenadas (fila/columna) en variables globales
     //        (usa selectedPiece y selectedPieceCoords).
+
+    globalThis.selectedPiece = piece;
+    globalThis.selectedPieceCoords = {row, col};
 }
 
 function resetSelection() {
-    // PASO 1: Elimina la selección activa, borrando las variables globales.
+    // PASO 1: Elimina la selección activa, borrando la data de las variables globales.
     //(usa selectedPiece y selectedPieceCoords)
+
+    globalThis.selectedPiece = null;
+    globalThis.selectedPieceCoords = null
 }
 
 function movePiece(fromRow, fromCol, toRow, toCol, skipTurn = false) {
     // PASO 1: Comprueba que el movimiento es válido (usa isMoveValid).
-    // PASO 2: Si no es válido, avisa y detén el proceso.
+    // PASO 2: Si no es válido, avisa, detén el proceso y envía un alert "Movimiento inválido".
     // PASO 3: Si es válido, procesa la captura si existe (usa handleCapture).
     // PASO 4: Actualiza el tablero (usa updateBoard).
-    // PASO 5: Aumenta el contador de movimientos.
-    // PASO 6: Si corresponde, cambia de turno.
-    // PASO 7: Verifica si el juego ha terminado.
+    // PASO 5: Aumenta el contador de movimientos utiliza la variable global moveCount.
+    // PASO 6: Si corresponde, cambia de turno utiliza el método (switchTurn).
+    // PASO 7: Verifica si el juego ha terminado utiliza el método (checkGameEnd).
     // PASO 8: Devuelve true si se movió, false si no.
+
+    if (isMoveValid(fromRow, fromCol, toRow, toCol)) {
+        let captured = handleCapture(fromRow, fromCol, toRow, toCol);
+        updateBoard(fromRow, fromCol, toRow, toCol);
+
+        moveCount++;
+
+        if (!captured) {
+            switchTurn();
+        }
+
+        checkGameEnd();
+
+        return true;
+    } else {
+        alert("Movimiento inválido");
+    }
+
+    return false;
 }
 function handleCapture(fromRow, fromCol, toRow, toCol) {
     // PASO 1: Verifica si el movimiento fue de dos filas (salto).
     // PASO 2: Si fue así, localiza la ficha que ha sido saltada (posición intermedia).
-    // PASO 3: Elimina la ficha saltada (coloca null en esa posición en el tablero).
+    // PASO 3: Elimina la ficha saltada (coloca null en esa posición en el tablero) utiliza el método (isCaptureValid).
+    // FIXME: Podría no ser necesario utilizar isCaptureValid() en el paso 3 porque ya se utiliza en la función isMoveValid() que es el paso previo a esta función.
     // PASO 4: Devuelve true si hubo captura, false si no.
+
+    if (Math.abs(fromRow - toRow) === 2 && Math.abs(fromCol - toCol) === 2) {
+        const midRow = Math.floor((fromRow + toRow) / 2);
+        const midCol = Math.floor((fromCol + toCol) / 2);
+
+        globalThis.board[midRow][midCol] = null;
+        return true;
+    }
+
+    return false;
 }
 
 function updateBoard(fromRow, fromCol, toRow, toCol) {
     // PASO 1: Mueve la pieza de la casilla origen a la destino.
     // PASO 2: Deja la casilla origen vacía (null).
+
+    globalThis.board[toRow][toCol] = globalThis.board[fromRow][fromCol];
+    globalThis.board[fromRow][fromCol] = null;
+    // FIXME: Si en esta linea hago: globalThis.selectedPieceCoords = {row : null, col: null}; el test falla.
+    //  * En un principio lo hice así porque es la forma en la que se inicializa arriba. Ambas formas deberían estar bien.
 }
 
 function switchTurn() {
@@ -155,6 +209,16 @@ function isMoveValid(fromRow, fromCol, toRow, toCol) {
     // PASO 4: Si el movimiento es de dos casillas, llama a isCaptureValid
     //         para ver si se trata de una captura válida (salto por encima de rival).
     // PASO 5: En cualquier otra situación, el movimiento no es válido.
+
+    if (isWithinBounds(toRow, toCol) && board[toRow][toCol] === null) {
+        if (Math.abs(fromRow - toRow) === 1 && Math.abs(fromCol - toCol) === 1) {
+            return true;
+        } else if (Math.abs(fromRow - toRow) === 2 && Math.abs(fromCol - toCol) === 2) {
+            return isCaptureValid(fromRow, fromCol, toRow, toCol);
+        }
+    }
+
+    return false;
 }
 
 function isWithinBounds(row, col) {
@@ -169,6 +233,15 @@ function isCaptureValid(fromRow, fromCol, toRow, toCol) {
     // PASO 4: Devuelve true SOLO si hay una ficha rival en esa casilla (es decir,
     //         que no sea null y sea diferente a la actual).
     // PASO 5: Si no se cumplen las condiciones anteriores, devuelve false.
+
+    const midRow = Math.floor((fromRow + toRow) / 2);
+    const midCol = Math.floor((fromCol + toCol) / 2);
+
+    if (!isWithinBounds(midRow, midCol)) return false;
+
+    const pieceAtMid = board[midRow][midCol];
+
+    return pieceAtMid !== null && pieceAtMid !== board[fromRow][fromCol];
 }
 
 // ========== LÓGICA DEL CPU ==========
@@ -240,6 +313,15 @@ async function fetchGames() {
     // PASO 2: Espera la respuesta y transfórmala en un objeto/array (JSON).
     // PASO 3: Llama a displayGames con el array recibido.
     // PASO 4: Si falla la petición, muestra el error en un alert.
+
+    try {
+        const response = await fetch(API_URL);
+        const games = await response.json();
+
+        displayGames(games);
+    } catch (error) {
+        alert("Error al obtener las partidas: " + error);
+    }
 }
 function displayGames(games) {
     const historyDiv = document.getElementById('gamesList');
@@ -275,4 +357,4 @@ function resetGame() {
     initializeBoard();
     drawBoard();
 }
-module.exports = {initializeBoard, isMoveValid,fetchGames,saveGame,countPieces,handleCapture,isCaptureValid,selectPiece,resetSelection,updateBoard};
+module.exports = {initializeBoard, isMoveValid,fetchGames,saveGame,countPieces,handleCapture,isCaptureValid,selectPiece,resetSelection,updateBoard,movePiece};
